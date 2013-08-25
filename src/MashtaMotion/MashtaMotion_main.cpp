@@ -45,9 +45,8 @@ bool checkCombinations = true;
 bool sendOSCCombinations = true;
 bool multiUserMode = false;
 
-
 short g_showInfo = 0;
-
+bool initialized = false;
 
 bool g_currentPostures[Fubi::Postures::NUM_POSTURES];
 std::vector<bool> g_currentUserDefinedRecognizers;
@@ -211,9 +210,73 @@ void glutIdle (void)
 	glutPostRedisplay();
 }
 
+void initFUBI(){
+    std::cout << "Initializing FUBI" << std::endl;
+    
+    // Initialize UDP socket for OSC
+	sock.connectTo(host, OSC_PORT);
+	if (!sock.isOk()) {
+		std::cerr << "Error connection to port " << OSC_PORT << ": " << sock.errorMessage() << "\n";
+	} else {
+		std::cout << "Client started, will send packets to port " << OSC_PORT << std::endl;
+	}
+    
+    // Initialize tracking states for 16 users
+	for(int i=0; i<16; i++)
+		trackingStates[i] = false;
+	
+    mapping = new MappingMashtaCycle();
+    if(perfMode)
+    {
+        mapping->changeMode(true);
+        currentRecognizersFile = perfRecognizersFile;
+    }
+    else
+    {
+        mapping->changeMode(false);
+        currentRecognizersFile = installRecognizersFile;
+    }
+    //
+    
+	// Alternative init without xml
+	init(SensorOptions(StreamOptions(), StreamOptions(-1, -1, -1), StreamOptions(-1, -1, -1)));
+    
+	getDepthResolution(dWidth, dHeight);
+	getRgbResolution(rgbWidth, rgbHeight);
+	getIRResolution(irWidth, irHeight);
+    
+	g_depthData = new unsigned char[dWidth*dHeight*4];
+	if ( rgbWidth > 0 && rgbHeight > 0)
+		g_rgbData = new unsigned char[rgbWidth*rgbHeight*3];
+	if (irWidth > 0 && irHeight > 0)
+		g_irData = new unsigned char[irWidth*irHeight*4];
+    
+	memset(g_currentPostures, 0, sizeof(g_currentPostures));
+    
+	// All known combination recognizers will be started automatically for new users
+	setAutoStartCombinationRecognition(true);
+    //
+    
+    bool recognizersLoaded = loadRecognizersFromXML(currentRecognizersFile.c_str());
+    if(recognizersLoaded)
+        std::cout << "Loaded ";
+    else
+        std::cout << "Couldn't load ";
+    std::cout << "the recognizers from xml file " << currentRecognizersFile << std::endl;
+    
+	//combinationsJoints = getCombinations();
+    //
+}
+
+
 // The glut update functions called every frame
 void glutDisplay (void)
 {
+    if(!initialized){
+        initFUBI();
+        initialized = true;
+    }
+    
 	if (g_exitNextFrame)
 	{
 		release();
@@ -384,79 +447,55 @@ void glutKeyboard (unsigned char key, int x, int y)
 	}
 }
 
+#ifdef __APPLE__
+#include <sys/param.h>
+#include <mach-o/dyld.h> /* _NSGetExecutablePath : must add -framework CoreFoundation to link line */
+#define MAXPATHLENGTH 256
+std::string getExecutablePath(){
+    char *given_path;
+    std::string path("");
+    given_path = new char[MAXPATHLENGTH * 2];
+    if (!given_path) return path;
+    unsigned int pathsize = MAXPATHLENGTH * 2;
+    unsigned int result = _NSGetExecutablePath(given_path, &pathsize);
+    if (result == 0){
+        path = std::string (given_path);
+        size_t current=0;
+        while (current!=std::string::npos){
+            current=path.find("./",2);
+            if(current!=std::string::npos)
+                path.replace(current,2,"");
+        }
+		size_t executable=0;
+		executable=path.find_last_of("/");
+		if(executable!=std::string::npos)
+			path.replace(executable+1,path.length()-executable,"");
+		
+    }
+    free (given_path);
+    return path;
+}
+#endif
+
+
 int main(int argc, char ** argv)
 {
-    // Initialize UDP socket for OSC
-	sock.connectTo(host, OSC_PORT);
-	if (!sock.isOk()) {
-		std::cerr << "Error connection to port " << OSC_PORT << ": " << sock.errorMessage() << "\n";
-	} else {
-		std::cout << "Client started, will send packets to port " << OSC_PORT << std::endl;
-	}
-    
-    // Initialize tracking states for 16 users
-	for(int i=0; i<16; i++)
-		trackingStates[i] = false;
-	
-    mapping = new MappingMashtaCycle();
-    if(perfMode)
-    {
-        mapping->changeMode(true);
-        currentRecognizersFile = perfRecognizersFile;
-    }
-    else
-    {
-        mapping->changeMode(false);
-        currentRecognizersFile = installRecognizersFile;
-    }
-    //
-    
-	// Alternative init without xml
-	init(SensorOptions(StreamOptions(), StreamOptions(-1, -1, -1), StreamOptions(-1, -1, -1)));
-    
-	getDepthResolution(dWidth, dHeight);
-	getRgbResolution(rgbWidth, rgbHeight);
-	getIRResolution(irWidth, irHeight);
-    
-	g_depthData = new unsigned char[dWidth*dHeight*4];
-	if ( rgbWidth > 0 && rgbHeight > 0)
-		g_rgbData = new unsigned char[rgbWidth*rgbHeight*3];
-	if (irWidth > 0 && irHeight > 0)
-		g_irData = new unsigned char[irWidth*irHeight*4];
-    
-	memset(g_currentPostures, 0, sizeof(g_currentPostures));
-    
-	// All known combination recognizers will be started automatically for new users
-	setAutoStartCombinationRecognition(true);
-    //
-    
 #if defined(__APPLE__) && !defined(USE_DEBUG)
-    std::string appPath(argv[0]);
-    std::string suffix(".app");
-    size_t appNamePos = appPath.find(suffix.c_str());
-    std::string appName = appPath.substr(0,appNamePos + suffix.size());
-    recognizersFile = appName + std::string("/Contents/MacOS/") + recognizersFile;
+    std::string appPath = getExecutablePath();
+    std::cout << "App path: " << appPath << std::endl;
+    perfRecognizersFile = appPath + perfRecognizersFile;
+    installRecognizersFile = appPath + installRecognizersFile;
 #endif
     
-    bool recognizersLoaded = loadRecognizersFromXML(currentRecognizersFile.c_str());
-    if(recognizersLoaded)
-        std::cout << "Loaded ";
-    else
-        std::cout << "Couldn't load ";
-    std::cout << "the recognizers from xml file " << currentRecognizersFile << std::endl;
-    
-	//combinationsJoints = getCombinations();
-    //
 #if defined ( WIN32 ) || defined( _WINDOWS )
     SetWindowPos( GetConsoleWindow(), HWND_TOP, dWidth+10, 0, 0, 0,
                  SWP_NOOWNERZORDER | SWP_NOSIZE | SWP_NOZORDER );
 #endif
-    
 	// OpenGL init
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH);
 	glutInitWindowSize(dWidth, dHeight);
-	glutCreateWindow ("FUBI - Recognizer OpenGL test");
+	glutCreateWindow ("MashtaMotion");
 	//glutFullScreen();
     
 	glutKeyboardFunc(glutKeyboard);
@@ -466,7 +505,7 @@ int main(int argc, char ** argv)
 	glDisable(GL_DEPTH_TEST);
 	glEnable(GL_TEXTURE_2D);
     
-	// Per frame code is in glutDisplay
+    // Per frame code is in glutDisplay
 	glutMainLoop();
 	release();
     
