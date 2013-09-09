@@ -311,8 +311,13 @@ MessageToSend MappingMashtaCycle::speedMessage(FubiUser* user)
 	float leftHandY = user->m_currentTrackingData.jointPositions[SkeletonJoint::LEFT_HAND].m_position.y;
 	float rightHandY = user->m_currentTrackingData.jointPositions[SkeletonJoint::RIGHT_HAND].m_position.y;
     
-	speed = (rightHandY-leftHandY)/100 + 1;
-	boundValue(&speed, 5, -3);
+	//speed = (rightHandY-leftHandY)/100 + 1; // -3..5
+	//boundValue(&speed, 5, -3);
+    
+	speed = (rightHandY-leftHandY)/400 + 1; // 0..2 centered on 1
+	boundValue(&speed, 2, 0);
+    
+    
 	mts.values.push_back(speed);
     
 	return mts;
@@ -325,7 +330,8 @@ MessageToSend MappingMashtaCycle::speedMessage(FubiUser* user, float defaultValu
 	mes << "/mediacycle/pointer/" << user->m_id << "/playback_speed";
     	mts.text = mes.str();
 	float speed = defaultValue;
-	boundValue(&speed, 5, -3);
+	//boundValue(&speed, 5, -3);
+	boundValue(&speed, 2, 0);
 	mts.values.push_back(speed);
     
 	return mts;
@@ -385,7 +391,10 @@ MessageToSend MappingMashtaCycle::positionMessage(FubiUser* user)
 		float z = user->m_currentTrackingData.jointPositions[SkeletonJoint::TORSO].m_position.z;
         
 		xPos = x/(500*sceneWidth);
-		yPos = 1-(z-1000*sceneDepthOffset)/(500*sceneDepth);
+		yPos = -(z-3600.0f)/1400.0f  ; //1-(z-1000*sceneDepthOffset)/(500*sceneDepth);
+		// 2200 -> 1 
+		// 5000 -> -1
+		//std::cout << " z " << z << " sceneDepth " << sceneDepth << " sceneDepthOffset " << sceneDepthOffset << std::endl;
         
 		boundValue(&xPos, 1, -1);
 		boundValue(&yPos, 1, -1);

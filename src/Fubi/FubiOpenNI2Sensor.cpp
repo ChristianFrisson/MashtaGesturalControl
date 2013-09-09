@@ -214,7 +214,7 @@ FubiOpenNI2Sensor::~FubiOpenNI2Sensor()
 	m_color.destroy();
 	m_ir.destroy();
 	m_device.close();
-	openni::OpenNI::shutdown();
+    openni::OpenNI::shutdown();//CF
 }
 
 void FubiOpenNI2Sensor::update()
